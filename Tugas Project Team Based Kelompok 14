@@ -1,0 +1,278 @@
+from ucimlrepo import fetch_ucirepo
+import missingno as msno
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+from sklearn.preprocessing import StandardScaler
+from sklearn.exceptions import DataConversionWarning
+from imblearn.over_sampling import RandomOverSampler
+from imblearn.under_sampling import RandomUnderSampler
+import warnings
+
+
+# Ignore DataConversionWarning
+warnings.filterwarnings(action='ignore', category=DataConversionWarning)
+
+# Fetch dataset
+fertility = fetch_ucirepo(id=244)
+
+# Data (as pandas dataframes)
+def input_data():
+    X = fertility.data.features
+    Y = fertility.data.targets
+
+    return X, Y, fertility.metadata, fertility.variables
+
+def missing_values(X):
+    # Check for missing values
+    missing_values_count = X.isnull().sum()
+    print("Missing Values Count:")
+    print(missing_values_count)
+    # Visualize missing values
+    msno.matrix(X)
+    plt.show()
+
+def mean_missing_values(X):
+    # Handle missing values: Example imputation (fill missing values with the mean of the column)
+    X = X.fillna(X.mean())
+    return X
+
+def convert(X):
+    # Convert non-numeric columns to numeric
+    X_numeric = pd.get_dummies(X)
+    return X_numeric
+
+def normalize_features(X):
+    # Normalize all numeric features
+    scaler = StandardScaler()
+    X[X.select_dtypes(include=['float64', 'int64']).columns] = scaler.fit_transform(X.select_dtypes(include=['float64', 'int64']))
+    return X
+
+def explore_data(X, Y):
+    print(X.describe())
+    
+    plt.figure(figsize=(10, 8))
+    corr_matrix = X.corr()
+    cmap = sns.diverging_palette(220, 20, as_cmap=True)
+    sns.heatmap(corr_matrix, annot=True, cmap=cmap, fmt=".2f")
+    plt.title("Correlation Matrix")
+    plt.show()
+
+    # Ensure target variable is numeric
+    if isinstance(Y, pd.DataFrame):
+        # Assuming target variable is in the first column
+        Y = Y.iloc[:, 0]
+
+    if isinstance(Y.dtype, pd.CategoricalDtype) or Y.dtype == 'object':
+        Y = pd.get_dummies(Y, drop_first=True).squeeze()  # Ensure Y is a Series
+    
+    # Correlation between features and target
+    plt.figure(figsize=(10, 8))
+    combined_data = X.copy()
+    combined_data['diagnosis'] = Y
+    corr_with_diagnosis = combined_data.corr()['diagnosis'].drop('diagnosis')
+    sns.heatmap(corr_with_diagnosis.to_frame(), annot=True, cmap='coolwarm', fmt=".2f")
+    plt.title("Correlation with Diagnosis")
+    plt.show()
+
+def oversample_data(X, Y):
+    os = RandomOverSampler()
+    X_osmpl, Y_osmpl = os.fit_resample(X, Y)
+    return X_osmpl, Y_osmpl
+
+def undersample_data_U(X, Y):
+    us = RandomUnderSampler(random_state=42)
+    X_usmpl, Y_usmpl = us.fit_resample(X, Y)
+    return X_usmpl, Y_usmpl
+
+#Split data for oversampling
+def split_data(X_osmpl, Y_osmpl):
+    X_train, X_test, y_train, y_test = train_test_split(X_osmpl, Y_osmpl, test_size=0.5, random_state=104)
+    return X_train, X_test, y_train, y_test
+
+def train_algorithm(X_train, Y_train, X_test, Y_test):
+    # Define and train k-Nearest Neighbors classifier
+    knn_model = KNeighborsClassifier(n_neighbors=5)
+    knn_model.fit(X_train, Y_train)
+
+    # Make predictions on the test set
+    knn_predictions = knn_model.predict(X_test)
+
+    # Calculate accuracy
+    knn_accuracy = accuracy_score(Y_test, knn_predictions)
+    knn_recall = recall_score(Y_test, knn_predictions, average='weighted', zero_division=0)
+    knn_precision = precision_score(Y_test, knn_predictions, average='weighted', zero_division=0)
+    knn_f1 = f1_score(Y_test, knn_predictions, average='weighted')
+    print("k-Nearest Neighbors f1 score :", knn_f1)
+    print("k-Nearest Neighbors Precision :", knn_precision)
+    print("k-Nearest Neighbors Recall :", knn_recall)
+    print("k-Nearest Neighbors Accuracy:", knn_accuracy)
+    print("")
+
+    # Define and train Decision Tree classifier
+    dt_model = DecisionTreeClassifier(random_state=104, max_depth=5, min_samples_split=2, min_samples_leaf=1)
+    dt_model.fit(X_train, Y_train)
+
+    # Make predictions on the test set
+    dt_predictions = dt_model.predict(X_test)
+
+    # Calculate accuracy
+    dt_accuracy = accuracy_score(Y_test, dt_predictions)
+    dt_recall = recall_score(Y_test, dt_predictions, average='weighted', zero_division=0)
+    dt_precision = precision_score(Y_test, dt_predictions, average='weighted', zero_division=0)
+    dt_f1 = f1_score(Y_test, dt_predictions, average='weighted')
+    print("Decision Tree f1 score :", dt_f1)
+    print("Decision Tree Precision :", dt_precision)
+    print("Decision Tree Recall :", dt_recall)
+    print("Decision Tree Accuracy:", dt_accuracy)
+
+#Split data for undersampling
+def split_data_U(X_usmpl, Y_usmpl):
+    X_trainU, X_testU, y_trainU, y_testU = train_test_split(X_usmpl, Y_usmpl, test_size=0.5, random_state=104)
+    return X_trainU, X_testU, y_trainU, y_testU
+
+def train_algorithm_U(X_trainU, Y_trainU, X_testU, Y_testU):
+    # Define and train k-Nearest Neighbors classifier
+    knn_model = KNeighborsClassifier(n_neighbors=5)
+    knn_model.fit(X_trainU, Y_trainU)
+
+    # Make predictions on the test set
+    knn_predictions = knn_model.predict(X_testU)
+
+    # Calculate accuracy
+    knn_accuracyU = accuracy_score(Y_testU, knn_predictions)
+    knn_recallU = recall_score(Y_testU, knn_predictions, average='weighted', zero_division=0)
+    knn_precisionU = precision_score(Y_testU, knn_predictions, average='weighted', zero_division=0)
+    knn_f1U = f1_score(Y_testU, knn_predictions, average='weighted')
+    print("k-Nearest Neighbors f1 score :", knn_f1U)
+    print("k-Nearest Neighbors Precision :", knn_precisionU)
+    print("k-Nearest Neighbors Recall :", knn_recallU)
+    print("k-Nearest Neighbors Accuracy:", knn_accuracyU)
+    print("")
+
+    # Define and train Decision Tree classifier
+    dt_model = DecisionTreeClassifier(random_state=104, max_depth=3, min_samples_split=2, min_samples_leaf=1)
+    dt_model.fit(X_trainU, Y_trainU)
+
+    # Make predictions on the test set
+    dt_predictions = dt_model.predict(X_testU)
+
+    # Calculate accuracy
+    dt_accuracyU = accuracy_score(Y_testU, dt_predictions)
+    dt_recallU = recall_score(Y_testU, dt_predictions, average='weighted', zero_division=0)
+    dt_precisionU = precision_score(Y_testU, dt_predictions, average='weighted', zero_division=0)
+    dt_f1U = f1_score(Y_testU, dt_predictions, average='weighted')
+    print("Decision Tree f1 score :", dt_f1U)
+    print("Decision Tree Precision :", dt_precisionU)
+    print("Decision Tree Recall :", dt_recallU)
+    print("Decision Tree Accuracy:", dt_accuracyU)
+  
+
+def detect_outliers(X):
+    outliers = {}
+    for column in X.columns:
+        q1 = X[column].quantile(0.25)
+        q3 = X[column].quantile(0.75)
+        iqr = q3 - q1
+        lower_bound = q1 - 1.5 * iqr
+        upper_bound = q3 + 1.5 * iqr
+        outliers[column] = X[(X[column] < lower_bound) | (X[column] > upper_bound)].index.tolist()
+    
+    for column, outlier_indices in outliers.items():
+        if len(outlier_indices) > 0:
+            print(f"Outliers detected in column '{column}': {outlier_indices}")
+        else:
+            print(f"No outliers detected in column '{column}'")
+    print("")
+
+def remove_outliers(X, Y):
+    outliers = {}
+    for column in X.columns:
+        q1 = X[column].quantile(0.25)
+        q3 = X[column].quantile(0.75)
+        iqr = q3 - q1
+        lower_bound = q1 - 1.5 * iqr
+        upper_bound = q3 + 1.5 * iqr
+        outliers[column] = X[(X[column] < lower_bound) | (X[column] > upper_bound)].index.tolist()
+    
+    # Flatten outlier indices
+    outlier_indices = list(set([index for indices in outliers.values() for index in indices]))  # Remove duplicates
+
+    # Remove outliers from X and Y
+    X_cleaned = X.drop(outlier_indices)
+    Y_cleaned = Y.drop(outlier_indices)
+
+    return X_cleaned, Y_cleaned
+    
+def main():
+    X, Y, metadata, variables = input_data()
+
+    print(metadata)
+    print(variables)
+
+    # Visualize missing values
+    missing_values(X)
+    
+    # Handle missing values
+    X = mean_missing_values(X)
+    
+    # Convert non-numeric columns to numeric
+    X_numeric = convert(X)
+    
+    # Normalize features
+    X_numeric = normalize_features(X_numeric)
+
+    # Exploratory Data Analysis
+    explore_data(X_numeric,Y)
+    
+    print("Oversample:")
+    # Detect outliers
+    print("Before removing outliers:")
+    detect_outliers(X_numeric)
+
+    # Remove outliers
+    X_numeric_cleaned, Y_cleaned = remove_outliers(X_numeric, Y)
+
+    # Detect outliers after removing outliers
+    print("After removing outliers:")
+    detect_outliers(X_numeric_cleaned)
+
+    # Oversample data
+    X_oversampled, Y_oversampled = oversample_data(X_numeric_cleaned, Y_cleaned)
+
+    # Split oversampled data into train and test sets
+    X_train, X_test, Y_train, Y_test = split_data(X_oversampled, Y_oversampled)
+
+    # Train and evaluate models
+    train_algorithm(X_train, Y_train, X_test, Y_test)
+    print("")
+
+    print("Undersample:")
+    # Detect outliers
+    print("Before removing outliers:")
+    detect_outliers(X_numeric)
+
+    # Remove outliers
+    X_numeric_cleaned, Y_cleaned = remove_outliers(X_numeric, Y)
+
+    # Detect outliers after removing outliers
+    print("After removing outliers:")
+    detect_outliers(X_numeric_cleaned)
+
+    # Undersample data
+    X_undersampled, Y_undersampled = undersample_data_U(X_numeric_cleaned, Y_cleaned)
+
+    # Split undersampled data into train and test sets
+    X_trainU, X_testU, Y_trainU, Y_testU = split_data_U(X_undersampled, Y_undersampled)
+
+    # Train and evaluate models
+    train_algorithm_U(X_trainU, Y_trainU, X_testU, Y_testU)
+    print("")
+        
+if _name_ == "_main_":
+    main()
